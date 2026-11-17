@@ -183,15 +183,26 @@ def _ingest(cfg: Config, args) -> int:
     _check_model(conn, cfg)
     embedder = _make_embedder(cfg)
     docs_dirs = _docs_dirs(cfg)
-    if args.all:
-        report = ingest.ingest_all(conn, embedder, docs_dirs, prune=args.prune)
-    elif args.paths:
-        report = ingest.ingest(
-            conn, embedder, [Path(p) for p in args.paths], docs_dirs, prune=args.prune
-        )
-    else:
+    if not args.all and not args.paths:
         print("error: give paths or --all", file=sys.stderr)
         return 2
+    with ingest.ingest_lock(cfg.data_dir) as acquired:
+        if not acquired:
+            print(
+                "ingest: another ingest run holds the lock (worker tick?); skipping.",
+                file=sys.stderr,
+            )
+            return 1
+        if args.all:
+            report = ingest.ingest_all(conn, embedder, docs_dirs, prune=args.prune)
+        else:
+            report = ingest.ingest(
+                conn,
+                embedder,
+                [Path(p) for p in args.paths],
+                docs_dirs,
+                prune=args.prune,
+            )
     print(f"omozo {_omozo_version()} ingest: {report.summary()}")
     return 0
 
@@ -212,10 +223,21 @@ def _ingest_loop(cfg: Config, args) -> int:
     )
     while True:
         try:
-            report = ingest.ingest_all(conn, embedder, docs_dirs, prune=True)
-            print(f"ingest-loop: {report.summary()}", flush=True)
-            for failed in report.failed:
-                print(f"ingest-loop: failed: {failed}", file=sys.stderr, flush=True)
+            with ingest.ingest_lock(cfg.data_dir) as acquired:
+                if not acquired:
+                    print(
+                        "ingest-loop: skipping tick, another ingest run holds the lock",
+                        flush=True,
+                    )
+                else:
+                    report = ingest.ingest_all(conn, embedder, docs_dirs, prune=True)
+                    print(f"ingest-loop: {report.summary()}", flush=True)
+                    for failed in report.failed:
+                        print(
+                            f"ingest-loop: failed: {failed}",
+                            file=sys.stderr,
+                            flush=True,
+                        )
         except Exception as exc:  # noqa: BLE001 - keep the loop alive on transient failures
             print(f"ingest-loop: run failed: {exc}", file=sys.stderr, flush=True)
         if args.once:

@@ -2,11 +2,44 @@
 
 from __future__ import annotations
 
+import fcntl
 import hashlib
+import os
 import sqlite3
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
+
+INGEST_LOCK_NAME = "omozo-ingest.lock"
+
+
+@contextmanager
+def ingest_lock(data_dir: Path) -> Iterator[bool]:
+    """Advisory whole-run mutex via flock on a lock file in data_dir.
+
+    Yields True when the lock was acquired. On contention yields False
+    immediately — a concurrent ingest run (worker tick vs manual exec) must
+    never process the same library twice at once; that starved SQLite and
+    doubled OCR work. The lock is released when the context exits or the
+    process dies.
+    """
+    data_dir.mkdir(parents=True, exist_ok=True)
+    fd = os.open(data_dir / INGEST_LOCK_NAME, os.O_CREAT | os.O_RDWR, 0o644)
+    try:
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+    finally:
+        os.close(fd)
+
 
 from omozo.memory import _serialize, utcnow_iso
 
@@ -63,17 +96,21 @@ def _hash_file(path: Path) -> str:
 
 
 def _walk(path: Path) -> list[Path]:
-    """All supported files under path (recursively for directories)."""
+    """All supported files under path (recursively for directories).
+
+    Skips hidden files and hidden directories (syncthing's .stfolder,
+    .stversions, and everything else starting with a dot).
+    """
     if path.is_file():
         return [path] if path.suffix.lower() in SUPPORTED_EXTENSIONS else []
     files: list[Path] = []
     for item in sorted(path.rglob("*")):
-        if (
-            item.is_file()
-            and not item.name.startswith(".")
-            and item.suffix.lower() in SUPPORTED_EXTENSIONS
-        ):
-            files.append(item)
+        if not item.is_file() or item.suffix.lower() not in SUPPORTED_EXTENSIONS:
+            continue
+        rel = item.relative_to(path)
+        if any(part.startswith(".") for part in rel.parts):
+            continue
+        files.append(item)
     return files
 
 

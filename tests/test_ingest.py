@@ -142,6 +142,45 @@ def test_ingest_one_bad_file_does_not_kill_the_run(conn, embedder, tmp_path, cap
     assert calls == ["bad.md", "good.md"] or set(calls) == {"bad.md", "good.md"}
 
 
+def test_ingest_skips_hidden_directories(conn, embedder, tmp_path):
+    """syncthing's .stfolder/.stversions must never reach the index."""
+    root = _mk_root(tmp_path)
+    _write(root, "real.md", "real document")
+    _write(root, ".stfolder/syncthing-marker.txt", "marker")
+    _write(root, ".stversions/real~20260918.md", "old version of real.md")
+    _write(root, "sub/.hidden.md", "dotfile")
+    _write(root, ".secrets/api-keys.md", "should not be indexed")
+    report = ingest.ingest_all(
+        conn, embedder, [root], convert_and_chunk=fake_convert_and_chunk
+    )
+    assert report.added == 1
+    paths = [r["path"] for r in conn.execute("SELECT path FROM sources").fetchall()]
+    assert all(".stfolder" not in p and ".stversions" not in p for p in paths)
+    assert all(not p.endswith(".hidden.md") for p in paths)
+
+
+def test_ingest_lock_contention(tmp_path):
+    with ingest.ingest_lock(tmp_path) as first:
+        assert first is True
+        with ingest.ingest_lock(tmp_path) as second:
+            assert second is False  # held by this process's first holder
+    # Released on exit: reacquirable.
+    with ingest.ingest_lock(tmp_path) as again:
+        assert again is True
+
+
+def test_ingest_lock_creates_dir(tmp_path):
+    lock_dir = tmp_path / "does-not-exist-yet"
+    with ingest.ingest_lock(lock_dir) as acquired:
+        assert acquired is True
+        assert lock_dir.exists()
+
+
+def test_ingest_lock_file_name(tmp_path):
+    with ingest.ingest_lock(tmp_path):
+        assert (tmp_path / "omozo-ingest.lock").exists()
+
+
 def test_ingest_missing_root_warns_but_survives(conn, embedder, tmp_path, capsys):
     ghost = tmp_path / "does-not-exist"
     report = ingest.ingest_all(
