@@ -1,0 +1,35 @@
+[project]
+name = "omozo"
+version = "0.1.0"
+description = "Local-first RAG and agent memory"
+readme = "README.md"
+authors = [
+    { name = "divin", email = "71128266+divin@users.noreply.github.com" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "docling>=2.150.1",
+    "fastmcp>=4.2.0",
+    "httpx>=0.28.1",
+    "sqlite-vec>=0.1.9",
+]
+
+[project.scripts]
+omozo = "omozo.main:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+    "pytest-asyncio>=1.5.0",
+    "ruff>=0.17.5",
+    "ty>=0.0.105",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+
+[build-system]
+requires = ["uv_build>=0.13.6,<0.14.0"]
+build-backend = "uv_build"

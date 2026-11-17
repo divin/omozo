@@ -1,0 +1,23 @@
+name: omozo
+
+services:
+  omozo:
+    image: ghcr.io/divin/omozo:latest
+    user: "${HOST_UID:-1000}:${HOST_GID:-1000}"
+    ports:
+      - "${OMOZO_PORT:-9095}:8000"
+    environment:
+      OMOZO_EMBED_URL: ${OMOZO_EMBED_URL:?Set OMOZO_EMBED_URL in .env}
+      OMOZO_EMBED_MODEL: ${OMOZO_EMBED_MODEL:-bge-m3}
+      OMOZO_RERANK_URL: ${OMOZO_RERANK_URL:-}
+      OMOZO_RERANK_MODEL: ${OMOZO_RERANK_MODEL:-bge-reranker-v2-m3}
+      OMOZO_MCP_TOKEN: ${OMOZO_MCP_TOKEN:-}
+      OMOZO_PREVIEW_CHARS: ${OMOZO_PREVIEW_CHARS:-600}
+      OMOZO_DEDUPE_THRESHOLD: ${OMOZO_DEDUPE_THRESHOLD:-0.92}
+      DATA_DIR: /data
+      DOCS_DIR: /data/docs
+      TZ: ${TZ:-Europe/Berlin}
+    volumes:
+      - ${HOST_DATA_DIR:-./data}:/data
+      - ${HOST_DOCS_DIR:?Set HOST_DOCS_DIR in .env}:/data/docs:ro
+    restart: unless-stopped
