@@ -6,6 +6,7 @@ import argparse
 import sqlite3
 import sys
 import time
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 
 import uvicorn
@@ -19,6 +20,13 @@ from omozo.rerank import RerankClient
 
 def _docs_dirs(cfg: Config) -> list[Path]:
     return list(cfg.docs_dirs)
+
+
+def _omozo_version() -> str:
+    try:
+        return version("omozo")
+    except PackageNotFoundError:  # pragma: no cover - dev checkout
+        return "unknown"
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -121,7 +129,10 @@ def _serve(cfg: Config) -> int:
         ),
         token=cfg.mcp_token,
     )
-    print(f"omozo serving on http://{cfg.host}:{cfg.port}/mcp (db: {cfg.db_path})")
+    print(
+        f"omozo {_omozo_version()} serving on http://{cfg.host}:{cfg.port}/mcp"
+        f" (db: {cfg.db_path})",
+    )
     uvicorn.run(app, host=cfg.host, port=cfg.port)
     return 0
 
@@ -181,7 +192,7 @@ def _ingest(cfg: Config, args) -> int:
     else:
         print("error: give paths or --all", file=sys.stderr)
         return 2
-    print(f"ingest: {report.summary()}")
+    print(f"omozo {_omozo_version()} ingest: {report.summary()}")
     return 0
 
 
@@ -195,7 +206,8 @@ def _ingest_loop(cfg: Config, args) -> int:
     embedder = _make_embedder(cfg)
     docs_dirs = _docs_dirs(cfg)
     print(
-        f"ingest-loop: interval={args.interval}s roots={list(map(str, docs_dirs))}",
+        f"omozo {_omozo_version()} ingest-loop: interval={args.interval}s"
+        f" roots={list(map(str, docs_dirs))}",
         flush=True,
     )
     while True:
