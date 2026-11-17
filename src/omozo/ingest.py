@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import hashlib
 import sqlite3
-from dataclasses import dataclass
+import sys
+from dataclasses import dataclass, field
 from pathlib import Path
 
 from omozo.memory import _serialize, utcnow_iso
@@ -26,6 +27,7 @@ class IngestReport:
     skipped: int = 0
     removed: int = 0
     chunks: int = 0
+    failed: list[str] = field(default_factory=list)
 
     def summary(self) -> str:
         parts = [
@@ -36,6 +38,8 @@ class IngestReport:
         ]
         if self.removed:
             parts.append(f"removed={self.removed}")
+        if self.failed:
+            parts.append(f"failed={len(self.failed)}")
         return " ".join(parts)
 
 
@@ -100,7 +104,11 @@ def ingest(
             continue
         for file in _walk(given):
             seen.add(file)
-            _ingest_file(conn, embedder, file, docs_dirs, convert_and_chunk, report)
+            try:
+                _ingest_file(conn, embedder, file, docs_dirs, convert_and_chunk, report)
+            except Exception as exc:  # noqa: BLE001 - one bad file must not kill the run
+                report.failed.append(str(file))
+                print(f"ingest: FAILED {file}: {exc}", file=sys.stderr)
     if prune:
         report.removed = _prune(conn, docs_dirs, seen)
     conn.commit()

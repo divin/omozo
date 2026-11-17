@@ -1,6 +1,6 @@
 [project]
 name = "omozo"
-version = "0.1.0"
+version = "0.1.1"
 description = "Local-first RAG and agent memory"
 readme = "README.md"
 authors = [
@@ -11,6 +11,7 @@ dependencies = [
     "docling>=2.150.1",
     "fastmcp>=4.2.0",
     "httpx>=0.28.1",
+    "onnxruntime>=1.32.0",
     "sqlite-vec>=0.1.9",
 ]
 

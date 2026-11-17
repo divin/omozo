@@ -118,12 +118,17 @@ re-embedding pass) — Omozo refuses to run mixed-dimension data.
 ## Hugging Face tokenizer cache
 
 First ingestion downloads the bge-m3 tokenizer (a few MB) into the
-container's HF cache — which vanishes on container recreation. To persist
-it, mount a cache volume and point `HF_HOME` at it:
+container's HF cache — which vanishes on container recreation unless
+persisted via `HF_HOME: /data/hf` (set in the compose file).
 
-```yaml
-environment:
-  HF_HOME: /data/hf
-volumes:
-  - ${HOST_DATA_DIR:-./data}:/data   # contains hf/ next to omozo.db
-```
+## OCR models
+
+Scanned PDFs are OCR'd with RapidOCR; its models (~30 MB: detection,
+angle classification, recognition) download on the first scanned-document
+conversion into `${DATA_DIR}/models/rapidocr` — inside the persisted
+`/data` volume — and are reused afterwards. They are explicitly pinned via
+`OMOZO_MODELS_DIR` because rapidocr's own auto-download targets the
+read-only site-packages directory. Override the location with
+`OMOZO_MODELS_DIR` if needed. Ingest failures are per-file: a broken
+document is logged (see `IngestReport.failed` in the ingest-loop output)
+and the run continues; the file is retried on the next tick.

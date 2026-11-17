@@ -119,6 +119,29 @@ def test_classify_root_falls_back_to_parent(tmp_path):
     assert label == "elsewhere"
 
 
+def test_ingest_one_bad_file_does_not_kill_the_run(conn, embedder, tmp_path, capsys):
+    root = _mk_root(tmp_path)
+    _write(root, "good.md", "good document")
+    bad = root / "bad.md"
+    bad.write_text("bad document", encoding="utf-8")
+
+    calls = []
+
+    def flaky_convert(file: Path):
+        calls.append(file.name)
+        if file.name == "bad.md":
+            raise RuntimeError("conversion exploded")
+        return fake_convert_and_chunk(file)
+
+    report = ingest.ingest(
+        conn, embedder, [root], [root], convert_and_chunk=flaky_convert
+    )
+    assert report.added == 1  # good file still ingested
+    assert report.failed == [str(bad)]
+    assert "FAILED" in capsys.readouterr().err
+    assert calls == ["bad.md", "good.md"] or set(calls) == {"bad.md", "good.md"}
+
+
 def test_ingest_missing_root_warns_but_survives(conn, embedder, tmp_path, capsys):
     ghost = tmp_path / "does-not-exist"
     report = ingest.ingest_all(

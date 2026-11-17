@@ -202,6 +202,8 @@ def _ingest_loop(cfg: Config, args) -> int:
         try:
             report = ingest.ingest_all(conn, embedder, docs_dirs, prune=True)
             print(f"ingest-loop: {report.summary()}", flush=True)
+            for failed in report.failed:
+                print(f"ingest-loop: failed: {failed}", file=sys.stderr, flush=True)
         except Exception as exc:  # noqa: BLE001 - keep the loop alive on transient failures
             print(f"ingest-loop: run failed: {exc}", file=sys.stderr, flush=True)
         if args.once:

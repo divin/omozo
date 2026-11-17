@@ -48,3 +48,32 @@ def test_full_pipeline_with_real_converter(conn, embedder, tmp_path):
     )
     assert "[c" in out
     assert "docs-1 » sample.md" in out
+
+
+def test_ocr_scanned_pdf_downloads_models_to_writable_dir(tmp_path, monkeypatch):
+    """RapidOCR models must download into OMOZO_MODELS_DIR, not site-packages."""
+    from PIL import Image, ImageDraw
+
+    import omozo.docling_adapter as adapter
+
+    models_dir = tmp_path / "ocr-models"
+    monkeypatch.setenv("OMOZO_MODELS_DIR", str(models_dir))
+    # The converter caches pinned OCR paths built from the env at first use;
+    # reset so this test builds its own with the monkeypatched dir.
+    adapter._converter = None
+    adapter._chunker = None
+
+    # Image-only PDF: text exists only as pixels, so OCR must run.
+    img = Image.new("RGB", (600, 200), "white")
+    draw = ImageDraw.Draw(img)
+    draw.text((20, 80), "The harbour sleeps under morning fog.", fill="black")
+    pdf = tmp_path / "scan.pdf"
+    img.save(pdf, "PDF")
+
+    from omozo.docling_adapter import convert_and_chunk
+
+    chunks = convert_and_chunk(pdf)
+    assert chunks, "expected at least one chunk"
+    joined = " ".join(chunk.text.lower() for chunk in chunks)
+    assert "harbour" in joined or "fog" in joined
+    assert (models_dir / "PP-OCRv6_det_small.onnx").exists()
