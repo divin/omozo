@@ -7,7 +7,7 @@ import hashlib
 import os
 import sqlite3
 import sys
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -16,7 +16,7 @@ INGEST_LOCK_NAME = "omozo-ingest.lock"
 
 
 @contextmanager
-def ingest_lock(data_dir: Path) -> Iterator[bool]:
+def ingest_lock(data_dir: Path) -> Generator[bool, None, None]:
     """Advisory whole-run mutex via flock on a lock file in data_dir.
 
     Yields True when the lock was acquired. On contention yields False
