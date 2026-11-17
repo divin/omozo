@@ -93,7 +93,7 @@ def _ensure_ocr_models(models_dir: Path) -> None:
             raise RuntimeError(f"RapidOCR model download failed for {name}")
         if downloaded != target:
             downloaded.rename(target)
-    print(f"omozo: RapidOCR models ready in {models_dir}")
+    print(f"omozo: RapidOCR models ready in {models_dir}", flush=True)
 
 
 def _make_converter():
