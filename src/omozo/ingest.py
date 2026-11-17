@@ -144,6 +144,10 @@ def ingest(
             try:
                 _ingest_file(conn, embedder, file, docs_dirs, convert_and_chunk, report)
             except Exception as exc:  # noqa: BLE001 - one bad file must not kill the run
+                # The file may have failed mid-transaction (e.g. at commit);
+                # without an explicit rollback the connection keeps holding
+                # the SQLite write lock forever.
+                conn.rollback()
                 report.failed.append(str(file))
                 print(f"ingest: FAILED {file}: {exc}", file=sys.stderr)
     if prune:
@@ -180,6 +184,9 @@ def _ingest_file(
 
     source_id = _upsert_source(conn, file, root, rel_path, content_hash, len(chunks))
     _replace_chunks(conn, source_id, source_label, chunks, vectors)
+    # Commit per file: a run must not hold the SQLite write lock across long
+    # conversion steps, or concurrent writers starve.
+    conn.commit()
     if row:
         report.updated += 1
     else:

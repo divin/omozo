@@ -176,6 +176,38 @@ def test_ingest_lock_creates_dir(tmp_path):
         assert lock_dir.exists()
 
 
+def test_ingest_rolls_back_failed_file_transaction(
+    conn, embedder, tmp_path, monkeypatch
+):
+    """A file failing mid-transaction must not hold the SQLite write lock."""
+    root = _mk_root(tmp_path)
+    _write(root, "a.md", "alpha document")
+    _write(root, "bad.md", "beta document")
+    _write(root, "c.md", "gamma document")
+
+    real = ingest._replace_chunks
+    calls = {"n": 0}
+
+    def flaky(source_id, label, chunks, vectors, *args, **kwargs):
+        calls["n"] += 1
+        if calls["n"] == 2:  # bad.md sorts second
+            raise RuntimeError("boom mid-transaction")
+        return real(source_id, label, chunks, vectors, *args, **kwargs)
+
+    monkeypatch.setattr(ingest, "_replace_chunks", flaky)
+    report = ingest.ingest(
+        conn, embedder, [root], [root], convert_and_chunk=fake_convert_and_chunk
+    )
+    assert report.failed == [str(root / "bad.md")]
+
+    texts = {r["text"] for r in conn.execute("SELECT text FROM chunk_rows")}
+    assert "alpha document" in texts and "gamma document" in texts
+    assert "beta document" not in texts
+    # No stuck lock: subsequent writes on the connection succeed.
+    conn.execute("INSERT INTO conversations(created_at, transcript) VALUES ('x', 'y')")
+    conn.commit()
+
+
 def test_ingest_lock_file_name(tmp_path):
     with ingest.ingest_lock(tmp_path):
         assert (tmp_path / "omozo-ingest.lock").exists()

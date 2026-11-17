@@ -105,7 +105,11 @@ def build_server(
                 dedupe_threshold,
             )
         except ValueError as exc:
+            conn.rollback()  # a rejected batch must leave no open transaction
             raise ToolError(str(exc)) from exc
+        except Exception:
+            conn.rollback()
+            raise
         saved = ", ".join(f"m{memory_id}" for memory_id in report["saved"]) or "none"
         lines = [f"Saved {len(report['saved'])} memories ({saved})."]
         for pair in report["superseded"]:

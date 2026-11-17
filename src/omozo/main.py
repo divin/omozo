@@ -239,6 +239,7 @@ def _ingest_loop(cfg: Config, args) -> int:
                             flush=True,
                         )
         except Exception as exc:  # noqa: BLE001 - keep the loop alive on transient failures
+            conn.rollback()  # never leave an open write transaction on the shared connection
             print(f"ingest-loop: run failed: {exc}", file=sys.stderr, flush=True)
         if args.once:
             return 0
